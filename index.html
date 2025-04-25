@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Pump/Dump Detector</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #ffffff;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #333;
+    }
+    td.pump {
+      background-color: #003300;
+    }
+    td.dump {
+      background-color: #330000;
+    }
+    a {
+      color: #00ffcc;
+    }
+  </style>
+</head>
+<body onclick="document.getElementById('alert-sound').play().catch(()=>{})">
+  <h1><strong>Crypto Pump/Dump Detector</strong><br>Monitoramento em tempo real - 1, 3, 5 e 15 minutos</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Par</th>
+        <th>Origem</th>
+        <th>Preço atual</th>
+        <th>1 Min</th>
+        <th>3 Min</th>
+        <th>5 Min</th>
+        <th>15 Min</th>
+        <th>Ver</th>
+      </tr>
+    </thead>
+    <tbody id="crypto-table"></tbody>
+  </table>
+
+  <audio id="alert-sound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
+
+  <script>
+    const intervals = [1, 3, 5, 15];
+    const priceHistory = {};
+    const table = document.getElementById("crypto-table");
+    const alertSound = document.getElementById("alert-sound");
+
+    function updateTable(symbol, origin, price) {
+      const key = `${origin}_${symbol}`;
+      const now = Date.now();
+
+      if (!priceHistory[key]) {
+        priceHistory[key] = [];
+      }
+      priceHistory[key].push({ time: now, price });
+      priceHistory[key] = priceHistory[key].filter(p => now - p.time <= 15 * 60000);
+
+      const rowId = `row-${key}`;
+      let row = document.getElementById(rowId);
+      const isNew = !row;
+
+      if (isNew) {
+        row = document.createElement("tr");
+        row.id = rowId;
+        row.innerHTML = `
+          <td>${symbol}</td>
+          <td>${origin}</td>
+          <td class="price"></td>
+          <td class="change-1"></td>
+          <td class="change-3"></td>
+          <td class="change-5"></td>
+          <td class="change-15"></td>
+          <td><a href="${origin === 'Binance' ? `https://www.binance.com/en/trade/${symbol}` : `https://www.mexc.com/exchange/${symbol}`}" target="_blank">Ver</a></td>
+        `;
+        table.appendChild(row);
+      }
+      row.querySelector(".price").textContent = price.toFixed(6);
+
+      let hasPumpDump = false;
+
+      intervals.forEach(min => {
+        const past = priceHistory[key].find(p => now - p.time >= min * 60000);
+        const cell = row.querySelector(`.change-${min}`);
+        if (past) {
+          const diff = ((price - past.price) / past.price) * 100;
+          cell.textContent = `${diff > 0 ? "+" : ""}${diff.toFixed(2)}%`;
+          const classType = diff > 2 ? "pump" : diff < -2 ? "dump" : "";
+          cell.className = `change-${min} ${classType}`;
+          if (Math.abs(diff) > 2) {
+            alertSound.play().catch(() => {});
+            hasPumpDump = true;
+          }
+        } else {
+          cell.textContent = "...";
+          cell.className = `change-${min}`;
+        }
+      });
+
+      // mover para o topo se for pump ou dump
+      if (hasPumpDump && table.firstChild !== row) {
+        table.insertBefore(row, table.firstChild);
+      }
+    }
+
+    const wsBinance = new WebSocket("wss://stream.binance.com:9443/ws/!ticker@arr");
+    wsBinance.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      data.forEach(tick => {
+        if (tick.s.endsWith("USDT")) {
+          updateTable(tick.s, "Binance", parseFloat(tick.c));
+        }
+      });
+    };
+
+    const wsMEXC = new WebSocket("wss://wbs.mexc.com/ws");
+    wsMEXC.onopen = () => {
+      const pairs = ["BTC_USDT", "ETH_USDT", "XRP_USDT", "SOL_USDT", "DOGE_USDT"];
+      const subscriptions = pairs.map(p => `spot@public@ticker.${p}`);
+      wsMEXC.send(JSON.stringify({ method: "SUBSCRIPTION", params: subscriptions, id: Date.now() }));
+    };
+    wsMEXC.onmessage = (event) => {
+      const json = JSON.parse(event.data);
+      if (!json?.data?.symbol) return;
+      const symbol = json.data.symbol.replace("_", "");
+      const price = parseFloat(json.data.c);
+      updateTable(symbol, "MEXC", price);
+    };
+  </script>
+</body>
+</html>
