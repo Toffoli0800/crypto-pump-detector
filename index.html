@@ -226,10 +226,37 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
 }
     }
 
-    const wsBinance = new WebSocket("wss://stream.binance.com:9443/ws/!ticker@arr");
+    function createRow(symbol, origin, price) {
+  const key = `${origin}_${symbol}`;
+  const safeKey = key.replace(/[^a-zA-Z0-9_\-]/g, "-");
+  const rowId = `row-${safeKey}`;
+  let row = document.getElementById(rowId);
+  if (!row) {
+    row = document.createElement("tr");
+    row.id = rowId;
+    row.innerHTML = `
+      <td>${symbol}</td>
+      <td>${origin}</td>
+      <td class="price">${price.toFixed(6)}</td>
+      <td class="change-1">...</td>
+      <td class="change-3">...</td>
+      <td class="change-5">...</td>
+      <td class="change-15">...</td>
+      <td><a href="${origin === 'Binance' ? `https://www.binance.com/en/trade/${symbol}` : `https://www.mexc.com/exchange/${symbol}`}" target="_blank">Ver</a></td>
+    `;
+    table.appendChild(row);
+  }
+}
+
+const wsBinance = new WebSocket("wss://stream.binance.com:9443/ws/!ticker@arr");
     fetch("https://api.binance.com/api/v3/ticker/price")
       .then(res => res.json())
       .then(data => {
+        data.forEach(tick => {
+          if (tick.symbol.endsWith("USDT")) {
+            createRow(tick.symbol, "Binance", parseFloat(tick.price));
+          }
+        });
         data.forEach(tick => {
           if (tick.symbol.endsWith("USDT")) {
             updateTable(tick.symbol, "Binance", parseFloat(tick.price));
