@@ -154,8 +154,7 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
       const safeKey = key.replace(/[^a-zA-Z0-9\-]/g, "-");
       const rowId = `row-${safeKey}`;
       let row = document.getElementById(rowId);
-      if (!rowId) return;
-      const isNew = !row;
+            const isNew = !row;
 
       if (isNew) {
         row = document.createElement("tr");
