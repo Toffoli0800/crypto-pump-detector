@@ -1,4 +1,4 @@
-k<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -219,7 +219,7 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
   rows.sort((a, b) => {
     const parse = el => {
       const val = parseFloat(el?.textContent?.replace('%', '') || 0);
-      return isNaN(val) ? 0 : Math.abs(val);
+      return isNaN(val) ? 0 : val;
     };
     return parse(b.querySelector(".change-1")) - parse(a.querySelector(".change-1"));
   });
@@ -275,4 +275,3 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
   </script>
 </body>
 </html>
-
