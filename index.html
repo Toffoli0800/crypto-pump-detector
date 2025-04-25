@@ -254,9 +254,10 @@ const wsBinance = new WebSocket("wss://stream.binance.com:9443/ws/!ticker@arr");
       .then(data => {
         data.forEach(tick => {
           if (tick.symbol.endsWith("USDT")) {
-            createRow(tick.symbol, "Binance", parseFloat(tick.price));
+            updateTable(tick.symbol, "Binance", parseFloat(tick.price));
           }
         });
+      });
         data.forEach(tick => {
           if (tick.symbol.endsWith("USDT")) {
             updateTable(tick.symbol, "Binance", parseFloat(tick.price));
