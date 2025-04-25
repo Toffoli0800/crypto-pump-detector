@@ -151,7 +151,7 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
   localStorage.setItem("priceHistory", JSON.stringify(priceHistory));
   localStorage.setItem("lastSyncTime", Date.now());
 
-      const safeKey = key.replace(/[^a-zA-Z0-9\-]/g, "-");
+      const safeKey = key.replace(/[^a-zA-Z0-9_\-]/g, "-");
       const rowId = `row-${safeKey}`;
       let row = document.getElementById(rowId);
             const isNew = !row;
