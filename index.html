@@ -1,3 +1,20 @@
+<div id="alert-log">
+  <table style="width:100%; text-align:left; border-collapse: collapse;">
+    <thead>
+      <tr style="border-bottom: 1px solid #333;">
+        <th>Par</th>
+        <th>Origem</th>
+        <th>Variação</th>
+        <th>Intervalo</th>
+        <th>Preço Antigo</th>
+        <th>Preço Atual</th>
+        <th>Horário</th>
+      </tr>
+    </thead>
+    <tbody id="alert-table-body"></tbody>
+  </table>
+</div>
+
 function updateTable(symbol, origin, price) {
   const key = `${origin}_${symbol}`;
   const now = Date.now();
@@ -34,6 +51,9 @@ function updateTable(symbol, origin, price) {
   if (!window.lastLoggedDiffs) {
     window.lastLoggedDiffs = {};
   }
+  if (!window.lastAlertTimes) {
+    window.lastAlertTimes = {};
+  }
 
   intervals.forEach(min => {
     const past = priceHistory[key].reduce((oldest, p) => {
@@ -49,12 +69,18 @@ function updateTable(symbol, origin, price) {
 
       const logKey = `${key}_${min}`;
       const lastLogged = window.lastLoggedDiffs[logKey] || 0;
+      const lastAlertTime = window.lastAlertTimes[logKey] || 0;
 
-      if (Math.abs(diff) > 2 && Math.abs(diff - lastLogged) >= 1) {
+      if (
+        Math.abs(diff) > 2 &&
+        Math.abs(diff - lastLogged) >= 1 &&
+        now - lastAlertTime >= 180000 // 3 minutos
+      ) {
         hasPumpDump = true;
         window.lastLoggedDiffs[logKey] = diff;
+        window.lastAlertTimes[logKey] = now;
         playSingleBeep(symbol);
-        logSignal(symbol, origin, diff, min);
+        logSignal(symbol, origin, diff, min, past.price, price);
       }
     } else {
       cell.textContent = "...";
@@ -65,4 +91,21 @@ function updateTable(symbol, origin, price) {
   if (hasPumpDump && table.firstChild !== row) {
     table.insertBefore(row, table.firstChild);
   }
+}
+
+function logSignal(symbol, origin, percent, min, oldPrice, currentPrice) {
+  const timestamp = new Date().toLocaleTimeString();
+  const alertTable = document.getElementById("alert-table-body");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${symbol}</td>
+    <td>${origin}</td>
+    <td>${percent.toFixed(2)}%</td>
+    <td>${min} min</td>
+    <td>${oldPrice.toFixed(6)}</td>
+    <td>${currentPrice.toFixed(6)}</td>
+    <td>${timestamp}</td>
+  `;
+  alertTable.prepend(tr);
+  while (alertTable.children.length > 100) alertTable.removeChild(alertTable.lastChild);
 }
