@@ -1,112 +1,238 @@
-<div id="alert-log">
-  <table style="width:100%; text-align:left; border-collapse: collapse;">
-    <thead>
-      <tr style="border-bottom: 1px solid #333;">
-        <th>Par</th>
-        <th>Origem</th>
-        <th>Variação</th>
-        <th>Intervalo</th>
-        <th>Preço Antigo</th>
-        <th>Preço Atual</th>
-        <th>Horário</th>
-      </tr>
-    </thead>
-    <tbody id="alert-table-body"></tbody>
-  </table>
-</div>
-
-function updateTable(symbol, origin, price) {
-  const table = document.getElementById("crypto-table");
-  const key = `${origin}_${symbol}`;
-  const now = Date.now();
-
-  if (!priceHistory[key]) {
-    priceHistory[key] = [];
-  }
-  priceHistory[key].push({ time: now, price });
-  priceHistory[key] = priceHistory[key].filter(p => now - p.time <= 15 * 60000);
-
-  const rowId = `row-${key}`;
-  let row = document.getElementById(rowId);
-  const isNew = !row;
-
-  if (isNew) {
-    row = document.createElement("tr");
-    row.id = rowId;
-    row.innerHTML = `
-      <td>${symbol}</td>
-      <td>${origin}</td>
-      <td class="price"></td>
-      <td class="change-1"></td>
-      <td class="change-3"></td>
-      <td class="change-5"></td>
-      <td class="change-15"></td>
-      <td><a href="${origin === 'Binance' ? `https://www.binance.com/en/trade/${symbol}` : `https://www.mexc.com/exchange/${symbol}`}" target="_blank">Ver</a></td>
-    `;
-    table.appendChild(row);
-  }
-  row.querySelector(".price").textContent = price.toFixed(6);
-
-  let hasPumpDump = false;
-
-  if (!window.lastLoggedDiffs) {
-    window.lastLoggedDiffs = {};
-  }
-  if (!window.lastAlertTimes) {
-    window.lastAlertTimes = {};
-  }
-
-  intervals.forEach(min => {
-    const past = priceHistory[key].reduce((oldest, p) => {
-      return now - p.time >= min * 60000 && (!oldest || p.time < oldest.time) ? p : oldest;
-    }, null);
-
-    const cell = row.querySelector(`.change-${min}`);
-    if (past) {
-      const diff = ((price - past.price) / past.price) * 100;
-      cell.textContent = `${diff > 0 ? "+" : ""}${diff.toFixed(2)}%`;
-      const classType = diff > 2 ? "pump" : diff < -2 ? "dump" : "";
-      cell.className = `change-${min} ${classType}`;
-
-      const logKey = `${key}_${min}`;
-      const lastLogged = window.lastLoggedDiffs[logKey] || 0;
-      const lastAlertTime = window.lastAlertTimes[logKey] || 0;
-
-      if (
-        Math.abs(diff) > 2 &&
-        Math.abs(diff - lastLogged) >= 1 &&
-        now - lastAlertTime >= 180000 // 3 minutos
-      ) {
-        hasPumpDump = true;
-        window.lastLoggedDiffs[logKey] = diff;
-        window.lastAlertTimes[logKey] = now;
-        playSingleBeep(symbol);
-        logSignal(symbol, origin, diff, min, past.price, price);
-      }
-    } else {
-      cell.textContent = "...";
-      cell.className = `change-${min}`;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Pump/Dump Detector</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #ffffff;
+      text-align: center;
+      padding: 20px;
     }
-  });
+    h1 {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #333;
+    }
+    td.pump {
+      background-color: #003300;
+    }
+    td.dump {
+      background-color: #330000;
+    }
+    a {
+      color: #00ffcc;
+    }
+    .tab-buttons {
+      margin-bottom: 20px;
+    }
+    .tab-buttons button {
+      background: #333;
+      border: none;
+      padding: 10px 20px;
+      margin: 0 5px;
+      cursor: pointer;
+      color: white;
+      font-size: 16px;
+      border-radius: 5px;
+    }
+    .tab-buttons button.active {
+      background: #00ffcc;
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <h1><strong>Crypto Pump/Dump Detector</strong><br>Monitoramento em tempo real - 1, 3, 5 e 15 minutos</h1>
 
-  if (hasPumpDump && table.firstChild !== row) {
-    table.insertBefore(row, table.firstChild);
-  }
-}
+  <div class="tab-buttons">
+    <button id="liveBtn" class="active" onclick="switchTab('live')">📡 Monitoramento</button>
+    <button id="logBtn" onclick="switchTab('log')">📌 Sinais Detectados</button>
+  </div>
 
-function logSignal(symbol, origin, percent, min, oldPrice, currentPrice) {
-  const timestamp = new Date().toLocaleTimeString();
-  const alertTable = document.getElementById("alert-table-body");
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>${symbol}</td>
-    <td>${origin}</td>
-    <td>${percent.toFixed(2)}%</td>
-    <td>${min} min</td>
-    <td>${oldPrice.toFixed(6)}</td>
-    <td>${currentPrice.toFixed(6)}</td>
-    <td>${timestamp}</td>
-  `;
-  alertTable.prepend(tr);
-  while (alertTable.children.length > 100) alertTable.removeChild(alertTable.lastChild);
-}
+  <div id="live-tab">
+    <table>
+      <thead>
+        <tr>
+          <th>Par</th>
+          <th>Origem</th>
+          <th>Preço atual</th>
+          <th>1 Min</th>
+          <th>3 Min</th>
+          <th>5 Min</th>
+          <th>15 Min</th>
+          <th>Ver</th>
+        </tr>
+      </thead>
+      <tbody id="crypto-table"></tbody>
+    </table>
+  </div>
+
+  <div id="alert-log" style="display:none;">
+    <table style="width:100%; text-align:left; border-collapse: collapse;">
+      <thead>
+        <tr style="border-bottom: 1px solid #333;">
+          <th>Par</th>
+          <th>Origem</th>
+          <th>Variação</th>
+          <th>Intervalo</th>
+          <th>Preço Antigo</th>
+          <th>Preço Atual</th>
+          <th>Horário</th>
+        </tr>
+      </thead>
+      <tbody id="alert-table-body"></tbody>
+    </table>
+  </div>
+
+  <audio id="alert-sound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
+
+  <script>
+    function switchTab(tab) {
+      document.getElementById("live-tab").style.display = tab === 'live' ? 'block' : 'none';
+      document.getElementById("alert-log").style.display = tab === 'log' ? 'block' : 'none';
+      document.getElementById("liveBtn").classList.toggle("active", tab === 'live');
+      document.getElementById("logBtn").classList.toggle("active", tab === 'log');
+    }
+    const intervals = [1, 3, 5, 15];
+    const priceHistory = {};
+    const lastSoundPlay = {};
+    const lastLoggedDiffs = {};
+    const lastAlertTimes = {};
+    const table = document.getElementById("crypto-table");
+    const alertList = document.getElementById("alert-table-body");
+    const alertSound = document.getElementById("alert-sound");
+
+    function playSingleBeep(symbol) {
+      const now = Date.now();
+      if (!lastSoundPlay[symbol] || now - lastSoundPlay[symbol] > 10000) {
+        alertSound.play().catch(() => {});
+        lastSoundPlay[symbol] = now;
+      }
+    }
+
+    function logSignal(symbol, origin, percent, min, oldPrice, currentPrice) {
+      const timestamp = new Date().toLocaleTimeString();
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${symbol}</td>
+        <td>${origin}</td>
+        <td>${percent.toFixed(2)}%</td>
+        <td>${min} min</td>
+        <td>${oldPrice.toFixed(6)}</td>
+        <td>${currentPrice.toFixed(6)}</td>
+        <td>${timestamp}</td>
+      `;
+      alertList.prepend(tr);
+      while (alertList.children.length > 100) alertList.removeChild(alertList.lastChild);
+    }
+
+    function updateTable(symbol, origin, price) {
+      const key = `${origin}_${symbol}`;
+      const now = Date.now();
+      if (!priceHistory[key]) priceHistory[key] = [];
+      priceHistory[key].push({ time: now, price });
+      priceHistory[key] = priceHistory[key].filter(p => now - p.time <= 15 * 60000);
+
+      const rowId = `row-${key}`;
+      let row = document.getElementById(rowId);
+      const isNew = !row;
+
+      if (isNew) {
+        row = document.createElement("tr");
+        row.id = rowId;
+        row.innerHTML = `
+          <td>${symbol}</td>
+          <td>${origin}</td>
+          <td class="price"></td>
+          <td class="change-1"></td>
+          <td class="change-3"></td>
+          <td class="change-5"></td>
+          <td class="change-15"></td>
+          <td><a href="${origin === 'Binance' ? `https://www.binance.com/en/trade/${symbol}` : `https://www.mexc.com/exchange/${symbol}`}" target="_blank">Ver</a></td>
+        `;
+        table.appendChild(row);
+      }
+
+      row.querySelector(".price").textContent = price.toFixed(6);
+      let hasPumpDump = false;
+
+      intervals.forEach(min => {
+        const past = priceHistory[key].reduce((oldest, p) => {
+          return now - p.time >= min * 60000 && (!oldest || p.time < oldest.time) ? p : oldest;
+        }, null);
+
+        const cell = row.querySelector(`.change-${min}`);
+        if (past) {
+          const diff = ((price - past.price) / past.price) * 100;
+          cell.textContent = `${diff > 0 ? "+" : ""}${diff.toFixed(2)}%`;
+          const classType = diff > 2 ? "pump" : diff < -2 ? "dump" : "";
+          cell.className = `change-${min} ${classType}`;
+
+          const logKey = `${key}_${min}`;
+          const lastLogged = lastLoggedDiffs[logKey] || 0;
+          const lastAlertTime = lastAlertTimes[logKey] || 0;
+
+          if (
+            Math.abs(diff) > 2 &&
+            Math.abs(diff - lastLogged) >= 1 &&
+            now - lastAlertTime >= 180000
+          ) {
+            hasPumpDump = true;
+            lastLoggedDiffs[logKey] = diff;
+            lastAlertTimes[logKey] = now;
+            playSingleBeep(symbol);
+            logSignal(symbol, origin, diff, min, past.price, price);
+          }
+        } else {
+          cell.textContent = "...";
+          cell.className = `change-${min}`;
+        }
+      });
+
+      if (hasPumpDump && table.firstChild !== row) {
+        table.insertBefore(row, table.firstChild);
+      }
+    }
+
+    const wsBinance = new WebSocket("wss://stream.binance.com:9443/ws/!ticker@arr");
+    wsBinance.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      data.forEach(tick => {
+        if (tick.s.endsWith("USDT")) {
+          updateTable(tick.s, "Binance", parseFloat(tick.c));
+        }
+      });
+    };
+
+    const wsMEXC = new WebSocket("wss://contract.mexc.com/ws");
+    wsMEXC.onopen = () => {
+      const contracts = ["BTC_USDT", "ETH_USDT", "PEPE_USDT", "ORDI_USDT", "DOGE_USDT", "BONK_USDT", "BLUR_USDT", "1000PEPE_USDT", "FET_USDT", "LUNC_USDT"];
+      contracts.forEach(symbol => {
+        wsMEXC.send(JSON.stringify({
+          method: "sub.ticker",
+          param: symbol,
+          id: Date.now()
+        }));
+      });
+    };
+    wsMEXC.onmessage = (event) => {
+      const json = JSON.parse(event.data);
+      if (!json?.data?.symbol || !json?.data?.lastPrice) return;
+      const symbol = json.data.symbol;
+      const price = parseFloat(json.data.lastPrice);
+      updateTable(symbol, "MEXC", price);
+    };
+  </script>
+</body>
+</html>
