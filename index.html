@@ -97,11 +97,7 @@
 
   <audio id="alert-sound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
 
-  <script>
-    
-}
-
-function switchTab(tab) {
+  <script>function switchTab(tab) {
       document.getElementById("live-tab").style.display = tab === 'live' ? 'block' : 'none';
       document.getElementById("alert-log").style.display = tab === 'log' ? 'block' : 'none';
       document.getElementById("liveBtn").classList.toggle("active", tab === 'live');
@@ -155,8 +151,10 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
   localStorage.setItem("priceHistory", JSON.stringify(priceHistory));
   localStorage.setItem("lastSyncTime", Date.now());
 
-      const rowId = `row-${key}`;
+      const safeKey = key.replace(/[^a-zA-Z0-9\-]/g, "-");
+      const rowId = `row-${safeKey}`;
       let row = document.getElementById(rowId);
+      if (!rowId) return;
       const isNew = !row;
 
       if (isNew) {
