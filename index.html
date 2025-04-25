@@ -54,13 +54,22 @@
     <tbody id="crypto-table"></tbody>
   </table>
 
-  <audio id="alert-sound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
+  <audio id="alert-sound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
 
   <script>
     const intervals = [1, 3, 5, 15];
     const priceHistory = {};
     const table = document.getElementById("crypto-table");
     const alertSound = document.getElementById("alert-sound");
+    let lastPlayed = 0;
+
+    function playSingleBeep() {
+      const now = Date.now();
+      if (now - lastPlayed > 2000) { // só toca se passaram 2 segundos desde o último beep
+        alertSound.play().catch(() => {});
+        lastPlayed = now;
+      }
+    }
 
     function updateTable(symbol, origin, price) {
       const key = `${origin}_${symbol}`;
@@ -104,7 +113,6 @@
           const classType = diff > 2 ? "pump" : diff < -2 ? "dump" : "";
           cell.className = `change-${min} ${classType}`;
           if (Math.abs(diff) > 2) {
-            alertSound.play().catch(() => {});
             hasPumpDump = true;
           }
         } else {
@@ -113,6 +121,7 @@
         }
       });
 
+      if (hasPumpDump) playSingleBeep();
       if (hasPumpDump && table.firstChild !== row) {
         table.insertBefore(row, table.firstChild);
       }
@@ -128,17 +137,22 @@
       });
     };
 
-    const wsMEXC = new WebSocket("wss://wbs.mexc.com/ws");
+    const wsMEXC = new WebSocket("wss://contract.mexc.com/ws");
     wsMEXC.onopen = () => {
-      const pairs = ["BTC_USDT", "ETH_USDT", "XRP_USDT", "SOL_USDT", "DOGE_USDT"];
-      const subscriptions = pairs.map(p => `spot@public@ticker.${p}`);
-      wsMEXC.send(JSON.stringify({ method: "SUBSCRIPTION", params: subscriptions, id: Date.now() }));
+      const contracts = ["BTC_USDT", "ETH_USDT", "PEPE_USDT", "ORDI_USDT", "DOGE_USDT"];
+      contracts.forEach(symbol => {
+        wsMEXC.send(JSON.stringify({
+          method: "sub.ticker",
+          param: symbol,
+          id: Date.now()
+        }));
+      });
     };
     wsMEXC.onmessage = (event) => {
       const json = JSON.parse(event.data);
-      if (!json?.data?.symbol) return;
-      const symbol = json.data.symbol.replace("_", "");
-      const price = parseFloat(json.data.c);
+      if (!json?.data?.symbol || !json?.data?.lastPrice) return;
+      const symbol = json.data.symbol;
+      const price = parseFloat(json.data.lastPrice);
       updateTable(symbol, "MEXC", price);
     };
   </script>
