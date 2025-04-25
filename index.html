@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+k<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -209,9 +209,16 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
         }
       });
 
-      if (hasPumpDump && table.firstChild !== row) {
-        table.insertBefore(row, table.firstChild);
-      }
+      if (hasPumpDump) {
+  table.appendChild(row); // mantém na posição final
+  const rows = Array.from(table.querySelectorAll("tr")).slice(1); // exclui cabeçalho
+  rows.sort((a, b) => {
+    const aVal = parseFloat(a.querySelector(".change-1")?.textContent || 0);
+    const bVal = parseFloat(b.querySelector(".change-1")?.textContent || 0);
+    return Math.abs(bVal) - Math.abs(aVal);
+  });
+  rows.forEach(r => table.appendChild(r));
+}
     }
 
     const wsBinance = new WebSocket("wss://stream.binance.com:9443/ws/!ticker@arr");
@@ -262,3 +269,4 @@ if (Date.now() - lastSyncTime > 15 * 60 * 1000) {
   </script>
 </body>
 </html>
+
