@@ -16,6 +16,7 @@
 </div>
 
 function updateTable(symbol, origin, price) {
+  const table = document.getElementById("crypto-table");
   const key = `${origin}_${symbol}`;
   const now = Date.now();
 
